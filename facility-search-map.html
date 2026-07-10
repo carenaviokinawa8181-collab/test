@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>送迎範囲マップで施設を探す | ケアナビ沖縄</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@700;900&family=Noto+Sans+JP:wght@400;500;700&display=swap');
+
+  :root {
+    --brand:       #2E7CC9;
+    --brand-deep:  #1D5A9C;
+    --brand-soft:  #E9F2FB;
+    --brand-line:  #C9DFF3;
+    --leaf:        #3B9E4C;
+    --leaf-deep:   #2C7F3B;
+    --leaf-soft:   #E8F5EB;
+    --leaf-line:   #C6E7CD;
+    --ink:    #22313A;
+    --muted:  #5D6E76;
+    --faint:  #93A3AB;
+    --bg:     #F4F8F6;
+    --surface:#FFFFFF;
+    --border: #E3E9E8;
+    --ok:      #157A3E;  --ok-bg:      #DDF3E4;
+    --few:     #C05621;  --few-bg:     #FCEBD9;
+    --full:    #B92C2C;  --full-bg:    #FADEDD;
+    --closed:  #9AA7AE;  --closed-bg:  #F0F3F4;
+    --danger:    #C0392B;
+    --danger-bg: #FBEAE8;
+    --radius: 14px;
+    --shadow: 0 1px 3px rgba(16,42,48,0.06), 0 6px 20px rgba(16,42,48,0.06);
+    --shadow-hover: 0 2px 6px rgba(16,42,48,0.08), 0 12px 28px rgba(16,42,48,0.10);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html,body{height:100%;}
+  body {
+    font-family: 'Noto Sans JP', 'Hiragino Kaku Gothic ProN', sans-serif;
+    background: var(--bg); color: var(--ink);
+    font-size: 15px; line-height: 1.6;
+  }
+  .display { font-family: 'Zen Maru Gothic', 'Noto Sans JP', sans-serif; }
+  a{color:var(--brand);}
+  button{font-family:inherit;}
+
+  /* ===== Header ===== */
+  .header {
+    background: linear-gradient(135deg, #1D5A9C 0%, #2E7CC9 42%, #35945F 78%, #3B9E4C 100%);
+    color:#fff; padding:18px 16px 16px;
+  }
+  .header-inner{max-width:1100px;margin:0 auto;}
+  .header-top{display:flex;align-items:center;gap:10px;}
+  .back-link{
+    color:#fff; text-decoration:none; font-size:13px; font-weight:700;
+    background:rgba(255,255,255,0.16); border:1px solid rgba(255,255,255,0.3);
+    border-radius:999px; padding:6px 13px; flex-shrink:0;
+  }
+  .header h1{font-size:clamp(17px,4vw,22px);font-weight:900;letter-spacing:.02em;}
+  .header-sub{font-size:12px;color:rgba(255,255,255,0.85);margin-top:3px;}
+
+  /* ===== Search bar ===== */
+  .search-panel{max-width:1100px;margin:12px auto 0;padding:0 16px;}
+  .search-card{
+    background:var(--surface); border-radius:var(--radius); box-shadow:var(--shadow);
+    padding:14px 16px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;
+  }
+  .search-card input{
+    flex:1; min-width:200px; border:1.5px solid var(--border); border-radius:999px;
+    padding:10px 16px; font-size:15px; font-family:inherit; background:var(--bg); color:var(--ink);
+  }
+  .search-card input:focus{border-color:var(--brand); background:#fff; outline:none;}
+  .search-btn{
+    background:var(--brand); color:#fff; border:none; border-radius:999px;
+    padding:10px 22px; font-size:14px; font-weight:700; cursor:pointer; flex-shrink:0;
+  }
+  .search-btn:hover{background:var(--brand-deep);}
+  .search-hint{font-size:12px;color:var(--muted); width:100%;}
+  .search-status{font-size:12.5px; color:var(--brand-deep); font-weight:700; width:100%; display:none;}
+  .search-status.show{display:block;}
+  .search-status.err{color:var(--danger);}
+
+  /* ===== Layout ===== */
+  .layout{max-width:1100px;margin:12px auto 60px;padding:0 16px;display:grid;grid-template-columns:1fr;gap:14px;}
+  @media (min-width:860px){
+    .layout{grid-template-columns: 1.4fr 1fr; align-items:start;}
+  }
+
+  #map{
+    width:100%; height:min(58vh, 520px); border-radius:var(--radius);
+    box-shadow:var(--shadow); border:1px solid var(--border);
+  }
+  @media (min-width:860px){ #map{height:640px; position:sticky; top:12px;} }
+
+  /* ===== Legend ===== */
+  .legend-card{
+    background:var(--surface); border-radius:var(--radius); box-shadow:var(--shadow);
+    padding:12px 14px; margin-top:12px;
+  }
+  .legend-title{font-size:12.5px;font-weight:800;color:var(--muted);margin-bottom:8px;}
+  .legend-list{display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;}
+  .legend-row{display:flex;align-items:center;gap:8px;font-size:12.5px;}
+  .legend-row label{display:flex;align-items:center;gap:8px;cursor:pointer;flex:1;min-width:0;}
+  .legend-swatch{width:14px;height:14px;border-radius:4px;flex-shrink:0;}
+  .legend-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+  /* ===== Results panel ===== */
+  .results-card{
+    background:var(--surface); border-radius:var(--radius); box-shadow:var(--shadow);
+    padding:14px 16px;
+  }
+  .results-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px;}
+  .results-title{font-size:14.5px;font-weight:900;}
+  .results-toggle{display:flex;gap:6px;}
+  .rtab{
+    border:1.5px solid var(--border); background:#fff; color:var(--muted);
+    border-radius:999px; padding:5px 12px; font-size:12px; font-weight:700; cursor:pointer;
+  }
+  .rtab.active{background:var(--brand); border-color:var(--brand); color:#fff;}
+
+  .empty-note{color:var(--muted); font-size:13px; text-align:center; padding:26px 10px; line-height:1.7;}
+
+  .result-item{
+    border:1px solid var(--border); border-radius:12px; padding:12px 13px; margin-bottom:10px;
+    transition: box-shadow .15s;
+  }
+  .result-item.match{border-color:var(--brand-line); background:var(--brand-soft);}
+  .result-item:hover{box-shadow:var(--shadow-hover);}
+  .r-top{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+  .r-dot{width:11px;height:11px;border-radius:50%;flex-shrink:0;}
+  .r-name{font-size:14px;font-weight:900;flex:1;min-width:0;}
+  .r-match-badge{
+    font-size:10.5px; font-weight:800; color:var(--brand-deep); background:#fff;
+    border:1px solid var(--brand-line); border-radius:999px; padding:2px 9px; flex-shrink:0;
+  }
+  .r-days{display:grid; grid-template-columns:repeat(7,1fr); gap:3px; margin:8px 0;}
+  .r-day{text-align:center;}
+  .r-day-label{font-size:9.5px;color:var(--muted);font-weight:700;}
+  .r-day-sym{
+    width:100%; aspect-ratio:1; max-width:28px; margin:2px auto 0; border-radius:7px;
+    display:flex;align-items:center;justify-content:center; font-size:13px; font-weight:900;
+  }
+  .sym-ok{background:var(--ok-bg);color:var(--ok);}
+  .sym-few{background:var(--few-bg);color:var(--few);}
+  .sym-full{background:var(--full-bg);color:var(--full);}
+  .sym-closed{background:var(--closed-bg);color:var(--closed); font-size:10px;}
+  .r-badges{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0;}
+  .r-badge{
+    font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px;
+    background:var(--bg); color:var(--muted); border:1px solid var(--border);
+  }
+  .r-badge.ok{background:var(--ok-bg);color:var(--ok);border-color:transparent;}
+  .r-footer{display:flex;gap:8px;margin-top:8px;}
+  .r-btn{
+    border-radius:999px; padding:7px 14px; font-size:12px; font-weight:700; text-decoration:none;
+    display:inline-flex; align-items:center; gap:4px; border:1.5px solid var(--border); background:#fff; color:var(--brand-deep);
+  }
+  .r-btn.primary{background:var(--brand); border-color:var(--brand); color:#fff; margin-left:auto;}
+  .r-btn.primary:hover{background:var(--brand-deep);}
+  .r-btn:hover{background:var(--brand-soft);}
+
+  .loading-note{text-align:center;color:var(--muted);padding:40px 10px;font-size:13.5px;}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-inner">
+    <div class="header-top">
+      <a href="index.html" class="back-link">← 一覧に戻る</a>
+    </div>
+    <h1 class="display" style="margin-top:10px;">送迎範囲マップで施設を探す</h1>
+    <div class="header-sub">住所や地域名を入れると、送迎対応できる施設がひと目でわかります</div>
+  </div>
+</div>
+
+<div class="search-panel">
+  <div class="search-card">
+    <input type="text" id="addr-input" placeholder="例：那覇市首里、豊見城市豊見城 など" />
+    <button class="search-btn" onclick="searchAddress()">この住所で探す</button>
+    <div class="search-status" id="search-status"></div>
+    <div class="search-hint">地図を直接タップしてピンを置くこともできます。ピンが入った送迎範囲の施設が下に表示されます。</div>
+  </div>
+</div>
+
+<div class="layout">
+  <div>
+    <div id="map"></div>
+    <div class="legend-card">
+      <div class="legend-title">📍 施設の色分け（チェックで表示/非表示を切り替え）</div>
+      <div class="legend-list" id="legend-list"><div class="loading-note">読み込み中...</div></div>
+    </div>
+  </div>
+
+  <div class="results-card">
+    <div class="results-head">
+      <div class="results-title">検索結果</div>
+      <div class="results-toggle">
+        <button class="rtab active" id="tab-match" onclick="setResultTab('match')">送迎可能</button>
+        <button class="rtab" id="tab-all" onclick="setResultTab('all')">全施設</button>
+      </div>
+    </div>
+    <div id="results-body"><div class="empty-note">住所を検索するか、地図をタップしてピンを置くと、<br>送迎できる施設が表示されます。</div></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbznQzAMIPkNaG5QVkUIZXiYLvqCERKqS0ZpmD3ZmpDMGbv3gR2xKs8299z1qNadVTyN/exec';
+const SECRET_TOKEN    = 'carenavi-okinawa-2024';
+const YOYAKU_URL      = 'https://forms.gle/VFXsJY45mEaCePvT6';
+const DAYS = ['月','火','水','木','金','土','日'];
+const TODAY_IDX = (new Date().getDay() + 6) % 7;
+
+const COLOR_PALETTE = ['#2E7CC9','#3B9E4C','#C05621','#8E44AD','#D98E1B','#B92C2C','#16A085','#6D4FC4','#2C7FB8','#5C8A3A','#C2185B','#00796B'];
+
+let map, userMarker = null;
+let allFacilities = [];
+let facilityLayers = []; // {facility, polygon, color, marker}
+let resultTab = 'match';
+let currentMatches = [];
+
+function getSymClass(s){
+  if (!s || s==='休' || s==='-') return 'sym-closed';
+  if (s==='○') return 'sym-ok';
+  if (s==='△') return 'sym-few';
+  return 'sym-full';
+}
+
+function getCareBadgesHTML(f){
+  const info = f.info || {};
+  const badges = [];
+  if (info.transfer && /あり|可/.test(info.transfer)) badges.push('<span class="r-badge ok">🚐 送迎あり</span>');
+  if (info.wheelchair && /あり|可能|対応|可/.test(info.wheelchair) && !/要相談/.test(info.wheelchair)) {
+    badges.push('<span class="r-badge ok">♿ 車椅子対応</span>');
+  }
+  if (info.medical) {
+    const items = info.medical.split(/[、,・\n]/).map(s=>s.trim()).filter(Boolean);
+    if (items.some(s=>s.includes('吸引'))) badges.push('<span class="r-badge">💊 吸引</span>');
+    if (items.some(s=>s.includes('胃ろう')||s.includes('経鼻'))) badges.push('<span class="r-badge">💊 胃ろう</span>');
+  }
+  return badges.join('');
+}
+
+/* 点(lat,lng)がポリゴン内に入っているか判定(レイキャスト法) */
+function pointInPolygon(point, polygon){
+  const x = point[1], y = point[0];
+  let inside = false;
+  for (let i=0, j=polygon.length-1; i<polygon.length; j=i++){
+    const xi = polygon[i][1], yi = polygon[i][0];
+    const xj = polygon[j][1], yj = polygon[j][0];
+    const denom = (yj - yi) || 0.0000001;
+    const intersect = ((yi>y) !== (yj>y)) && (x < (xj-xi)*(y-yi)/denom + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+function initMap(){
+  map = L.map('map').setView([26.2124, 127.6809], 11); // 那覇中心
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors', maxZoom: 18
+  }).addTo(map);
+  map.on('click', (e) => placePin([e.latlng.lat, e.latlng.lng]));
+}
+
+function loadData(){
+  fetch(APPS_SCRIPT_URL + '?token=' + encodeURIComponent(SECRET_TOKEN))
+    .then(r => r.json())
+    .then(data => {
+      allFacilities = (data.facilities || []).filter(f => f.sokeiPolygon && f.sokeiPolygon.length > 0);
+      renderPolygons();
+      renderLegend();
+    })
+    .catch(() => {
+      document.getElementById('legend-list').innerHTML = '<div class="loading-note" style="color:var(--danger);">施設データの取得に失敗しました</div>';
+    });
+}
+
+function renderPolygons(){
+  facilityLayers = allFacilities.map((f, i) => {
+    const color = COLOR_PALETTE[i % COLOR_PALETTE.length];
+    const polygon = L.polygon(f.sokeiPolygon, {
+      color: color, weight: 2.5, fillColor: color, fillOpacity: 0.22
+    }).addTo(map).bindTooltip(f.name, {sticky:true});
+    let marker = null;
+    if (f.lat && f.lng) {
+      marker = L.circleMarker([f.lat, f.lng], {radius:5, color:'#fff', weight:2, fillColor:color, fillOpacity:1}).addTo(map);
+    }
+    return { facility: f, polygon, marker, color, visible: true };
+  });
+
+  if (facilityLayers.length) {
+    const group = L.featureGroup(facilityLayers.map(l => l.polygon));
+    map.fitBounds(group.getBounds(), { padding: [24,24] });
+  }
+}
+
+function renderLegend(){
+  const el = document.getElementById('legend-list');
+  if (!facilityLayers.length) {
+    el.innerHTML = '<div class="loading-note">送迎範囲が登録されている施設がまだありません</div>';
+    return;
+  }
+  el.innerHTML = facilityLayers.map((l, i) => `
+    <div class="legend-row">
+      <label>
+        <input type="checkbox" checked onchange="toggleLayer(${i}, this.checked)">
+        <span class="legend-swatch" style="background:${l.color};"></span>
+        <span class="legend-name">${l.facility.name}</span>
+      </label>
+    </div>
+  `).join('');
+}
+
+function toggleLayer(i, visible){
+  const l = facilityLayers[i];
+  l.visible = visible;
+  if (visible) {
+    l.polygon.addTo(map);
+    if (l.marker) l.marker.addTo(map);
+  } else {
+    map.removeLayer(l.polygon);
+    if (l.marker) map.removeLayer(l.marker);
+  }
+}
+
+function placePin(latlng){
+  if (userMarker) map.removeLayer(userMarker);
+  userMarker = L.marker(latlng, {
+    draggable: true,
+    icon: L.divIcon({
+      className: '',
+      html: '<div style="width:26px;height:26px;border-radius:50% 50% 50% 0;background:#1D5A9C;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);transform:rotate(-45deg);"></div>',
+      iconSize:[26,26], iconAnchor:[13,26]
+    })
+  }).addTo(map);
+  userMarker.on('dragend', () => {
+    const p = userMarker.getLatLng();
+    computeMatches([p.lat, p.lng]);
+  });
+  map.panTo(latlng);
+  computeMatches(latlng);
+}
+
+function computeMatches(latlng){
+  currentMatches = facilityLayers.filter(l => pointInPolygon(latlng, l.facility.sokeiPolygon)).map(l => l.facility);
+  facilityLayers.forEach(l => {
+    const isMatch = currentMatches.includes(l.facility);
+    l.polygon.setStyle({ weight: isMatch ? 4 : 2, fillOpacity: isMatch ? 0.4 : 0.15 });
+    if (isMatch) l.polygon.bringToFront();
+  });
+  renderResults();
+}
+
+function setResultTab(tab){
+  resultTab = tab;
+  document.getElementById('tab-match').classList.toggle('active', tab==='match');
+  document.getElementById('tab-all').classList.toggle('active', tab==='all');
+  renderResults();
+}
+
+function renderResultCard(f, isMatch){
+  const daysHTML = DAYS.map((d,i) => {
+    const sym = (f.symbols && f.symbols[d]) || '休';
+    const isToday = i === TODAY_IDX;
+    return `<div class="r-day"><div class="r-day-label">${d}</div><div class="r-day-sym ${getSymClass(sym)}" style="${isToday?'box-shadow:inset 0 0 0 1.5px var(--brand-line);':''}">${sym}</div></div>`;
+  }).join('');
+  const badges = getCareBadgesHTML(f);
+  return `<div class="result-item ${isMatch?'match':''}">
+    <div class="r-top">
+      <div class="r-name">${f.name}</div>
+      ${isMatch ? '<span class="r-match-badge">✓ 送迎範囲内</span>' : ''}
+    </div>
+    <div class="r-days">${daysHTML}</div>
+    ${badges ? `<div class="r-badges">${badges}</div>` : ''}
+    <div class="r-footer">
+      <a class="r-btn primary" href="${YOYAKU_URL}" target="_blank">予約する</a>
+    </div>
+  </div>`;
+}
+
+function renderResults(){
+  const el = document.getElementById('results-body');
+  if (resultTab === 'match') {
+    if (!userMarker) {
+      el.innerHTML = '<div class="empty-note">住所を検索するか、地図をタップしてピンを置くと、<br>送迎できる施設が表示されます。</div>';
+      return;
+    }
+    if (!currentMatches.length) {
+      el.innerHTML = '<div class="empty-note">この場所に送迎対応している施設が見つかりませんでした。<br>「全施設」タブから他の施設もご確認いただけます。</div>';
+      return;
+    }
+    el.innerHTML = currentMatches.map(f => renderResultCard(f, true)).join('');
+  } else {
+    if (!allFacilities.length) {
+      el.innerHTML = '<div class="empty-note">施設データを読み込み中です...</div>';
+      return;
+    }
+    el.innerHTML = allFacilities.map(f => renderResultCard(f, currentMatches.includes(f))).join('');
+  }
+}
+
+/* Nominatim(OpenStreetMap)で沖縄県内に限定した住所検索 */
+function searchAddress(){
+  const q = document.getElementById('addr-input').value.trim();
+  const statusEl = document.getElementById('search-status');
+  if (!q) return;
+  statusEl.textContent = '検索中...';
+  statusEl.className = 'search-status show';
+
+  const query = /沖縄/.test(q) ? q : (q + ' 沖縄県');
+  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=jp` +
+              `&viewbox=127.5,26.9,128.3,25.9&bounded=1&q=${encodeURIComponent(query)}`;
+
+  fetch(url, { headers: { 'Accept-Language': 'ja' } })
+    .then(r => r.json())
+    .then(results => {
+      if (!results || !results.length) {
+        statusEl.textContent = '住所が見つかりませんでした。市区町村名を含めて検索してみてください。';
+        statusEl.className = 'search-status show err';
+        return;
+      }
+      statusEl.className = 'search-status';
+      const { lat, lon } = results[0];
+      placePin([parseFloat(lat), parseFloat(lon)]);
+      map.setView([parseFloat(lat), parseFloat(lon)], 14);
+    })
+    .catch(() => {
+      statusEl.textContent = '検索に失敗しました。しばらくしてから再度お試しください。';
+      statusEl.className = 'search-status show err';
+    });
+}
+document.getElementById('addr-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') searchAddress();
+});
+
+initMap();
+loadData();
+</script>
+</body>
+</html>
